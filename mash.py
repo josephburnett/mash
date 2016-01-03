@@ -3,7 +3,7 @@ from pygame.locals import *
 
 # Configuration
 FPS = 30
-MAX_LETTERS = 12
+MAX_LETTERS = 20
 FONT_SIZE = 150
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -24,7 +24,16 @@ WORDS = []
 def handleKeyDown(key):
     global LETTERS
     if (key >= K_a and key <= K_z) or key in ALLOWED_PUNCTUATION:
-        LETTERS.append(chr(key).capitalize())
+        if key == K_RETURN:
+            # Return clears the input buffer
+            LETTERS = []
+        elif key == K_SPACE:
+            # Only one space in a row
+            if LETTERS[len(LETTERS)-1] != chr(K_SPACE):
+                LETTERS.append(chr(key))
+        else:
+            # Everything else appends capitalized
+            LETTERS.append(chr(key).capitalize())
         if len(LETTERS) > MAX_LETTERS:
             LETTERS = LETTERS[1:]
 
