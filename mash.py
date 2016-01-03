@@ -15,22 +15,40 @@ pygame.display.set_caption('MASH!')
 DISPLAYSURF = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 FPSCLOCK = pygame.time.Clock()
 FONT = pygame.font.SysFont(pygame.font.get_default_font(), FONT_SIZE)
-ALLOWED_PUNCTUATION = [K_SPACE, K_PERIOD]
+ALLOWED_PUNCTUATION = [K_SPACE, K_PERIOD, K_RETURN]
+ALLOWED_WORDS = []
+with open('words.txt', 'r') as f:
+    ALLOWED_WORDS = set(map(lambda x: x.strip().upper(), list(f)))
 
 # State
 LETTERS = ['M','A','S','H','!',' ',' ',' ',' ',' ']
 WORDS = []
+
+def recognizeWord():
+    word_letters = []
+    word = ''
+    for l in LETTERS:
+        if l == ' ' or l == '.':
+            word = ''.join(word_letters)
+            word_letters = []
+        else:
+            word_letters.append(l)
+    if word in ALLOWED_WORDS:
+        WORDS.append(word)
 
 def handleKeyDown(key):
     global LETTERS
     if (key >= K_a and key <= K_z) or key in ALLOWED_PUNCTUATION:
         if key == K_RETURN:
             # Return clears the input buffer
+            LETTERS.append(' ')
+            recognizeWord()
             LETTERS = []
         elif key == K_SPACE:
             # Only one space in a row
             if LETTERS[len(LETTERS)-1] != chr(K_SPACE):
                 LETTERS.append(chr(key))
+                recognizeWord()
         else:
             # Everything else appends capitalized
             LETTERS.append(chr(key).capitalize())
@@ -50,7 +68,14 @@ def refreshScreen():
     DISPLAYSURF.fill([0,0,0])
     l = FONT.render(''.join(LETTERS), 0, [255,255,255])
     w = l.get_width()
-    DISPLAYSURF.blit(l, [SCREEN_WIDTH - w - 25, 200])
+    DISPLAYSURF.blit(l, [SCREEN_WIDTH - w - 25, SCREEN_HEIGHT - 110])
+    word_offset = SCREEN_HEIGHT - 250
+    for w in reversed(WORDS):
+        if word_offset < -100:
+            continue
+        words = FONT.render(w, 0, [255,255,255])
+        DISPLAYSURF.blit(words, [0,word_offset])
+        word_offset -= 100
     pygame.display.flip()
 
 while True: # main game loop
