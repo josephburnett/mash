@@ -46,7 +46,7 @@ def handleKeyDown(key):
             LETTERS = []
         elif key == K_SPACE:
             # Only one space in a row
-            if LETTERS[len(LETTERS)-1] != chr(K_SPACE):
+            if len(LETTERS) > 0 and LETTERS[len(LETTERS)-1] != chr(K_SPACE):
                 LETTERS.append(chr(key))
                 recognizeWord()
         else:
