@@ -1,4 +1,5 @@
-import pygame, sys
+import os, pygame, sys
+from multiprocessing import Pool
 from pygame.locals import *
 
 # Configuration
@@ -19,10 +20,14 @@ ALLOWED_PUNCTUATION = [K_SPACE, K_PERIOD, K_RETURN]
 ALLOWED_WORDS = []
 with open('words.txt', 'r') as f:
     ALLOWED_WORDS = set(map(lambda x: x.strip().upper(), list(f)))
+POOL = Pool(processes=1)
 
 # State
 LETTERS = ['M','A','S','H','!',' ',' ',' ',' ',' ']
 WORDS = []
+
+def speak(word):
+    os.system('echo {} | festival --tts'.format(word))
 
 def recognizeWord():
     word_letters = []
@@ -35,6 +40,7 @@ def recognizeWord():
             word_letters.append(l)
     if word in ALLOWED_WORDS:
         WORDS.append(word)
+        POOL.apply_async(speak, [word])
 
 def handleKeyDown(key):
     global LETTERS
