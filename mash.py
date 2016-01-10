@@ -2,89 +2,143 @@ import os, pygame, sys
 from multiprocessing import Pool
 from pygame.locals import *
 
-# Configuration
-FPS = 30
-MAX_LETTERS = 20
-FONT_SIZE = 150
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
 
-# Initialization
-pygame.init()
-pygame.display.set_caption('MASH!')
+class Configuration:
+    def __init__(self):
+        self.fps = 30
+        self.max_letters = 20
+        self.font_size = 150
+        self.screen_width = 800
+        self.screen_height = 600
+        self.allowed_punctuation = [K_SPACE, K_PERIOD, K_RETURN]
 
-DISPLAYSURF = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-FPSCLOCK = pygame.time.Clock()
-FONT = pygame.font.SysFont(pygame.font.get_default_font(), FONT_SIZE)
-ALLOWED_PUNCTUATION = [K_SPACE, K_PERIOD, K_RETURN]
-ALLOWED_WORDS = []
-with open('words.txt', 'r') as f:
-    ALLOWED_WORDS = set(map(lambda x: x.strip().upper(), list(f)))
-POOL = Pool(processes=1)
 
-# State
-LETTERS = ['M','A','S','H','!',' ',' ',' ',' ',' ']
-WORDS = []
+class Time:
+
+    def __init__(self, config):
+        self.config = config
+        self.fps_clock = pygame.time.Clock()
+
+    def tick(self):
+        self.fps_clock.tick(self.config.fps)
+
+
+class Display:
+
+    def __init__(self, config):
+        self.config = config
+        self.surface = pygame.display.set_mode((config.screen_width, config.screen_height))
+        self.font = pygame.font.SysFont(pygame.font.get_default_font(), config.font_size)
+
+    def refresh(self, state):
+        self.surface.fill([0,0,0])
+        l = self.font.render(''.join(state.letters), 0, [255,255,255])
+        w = l.get_width()
+        self.surface.blit(l, [self.config.screen_width - w - 25, self.config.screen_height - 110])
+        word_offset = self.config.screen_height - 250
+        for w in reversed(state.words):
+            if word_offset < -100:
+                continue
+            words = self.font.render(w, 0, [255,255,255])
+            self.surface.blit(words, [0,word_offset])
+            word_offset -= 100
+        pygame.display.flip()
+
+
+class Speech:
+
+    def __init__(self, config):
+        self.config = config
+        self.pool = Pool(processes=1)
+
+    def say(self, word):
+        self.pool.apply_async(speak, [word])
+
+
+class Words:
+
+    def __init__(self, config):
+        self.config = config
+        with open('words.txt', 'r') as f:
+            self.known_words = set(map(lambda x: x.strip().upper(), list(f)))
+
+    def recognize(self, state):
+        word_letters = []
+        word = ''
+        for l in state.letters:
+            if l == ' ' or l == '.':
+                word = ''.join(word_letters)
+                word_letters = []
+            else:
+                word_letters.append(l)
+        if word in self.known_words:
+            return word
+
+
+class State:
+
+    def __init__(self, config):
+        self.config = config
+        self.letters = ['M','A','S','H','!',' ',' ',' ',' ',' ']
+        self.words = []
+
+
+class Game:
+
+    def __init__(self):
+        pygame.init()
+        pygame.display.set_caption('MASH!')
+        self.config = Configuration()
+        self.time = Time(self.config)
+        self.display = Display(self.config)
+        self.speech = Speech(self.config)
+        self.words = Words(self.config)
+        self.state = State(self.config)
+
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == KEYDOWN:
+                key = event.key
+                self.handle_key_down(key)
+
+    def handle_key_down(self, key):
+        if (key >= K_a and key <= K_z) or key in self.config.allowed_punctuation:
+            letters = self.state.letters
+            if key == K_RETURN:
+                # Return clears the input buffer
+                letters.append(' ')
+                word = self.words.recognize(self.state)
+                if word:
+                    self.state.words.append(word)
+                    self.speech.say(word)
+                self.state.letters = letters = []
+            elif key == K_SPACE:
+                # Only one space in a row
+                if len(letters) > 0 and letters[len(letters)-1] != chr(K_SPACE):
+                    letters.append(chr(key))
+                    word = self.words.recognize(self.state)
+                    if word:
+                        self.state.words.append(word)
+                        self.speech.say(word)
+            else:
+                # Everything else appends capitalized
+                letters.append(chr(key).capitalize())
+            if len(letters) > self.config.max_letters:
+                self.state.letters = letters = letters[1:]
+
+    def run(self):
+        while True:
+            self.handle_events()
+            self.display.refresh(self.state)
+            self.time.tick()
+
 
 def speak(word):
     os.system('echo {} | festival --tts'.format(word))
 
-def recognizeWord():
-    word_letters = []
-    word = ''
-    for l in LETTERS:
-        if l == ' ' or l == '.':
-            word = ''.join(word_letters)
-            word_letters = []
-        else:
-            word_letters.append(l)
-    if word in ALLOWED_WORDS:
-        WORDS.append(word)
-        POOL.apply_async(speak, [word])
 
-def handleKeyDown(key):
-    global LETTERS
-    if (key >= K_a and key <= K_z) or key in ALLOWED_PUNCTUATION:
-        if key == K_RETURN:
-            # Return clears the input buffer
-            LETTERS.append(' ')
-            recognizeWord()
-            LETTERS = []
-        elif key == K_SPACE:
-            # Only one space in a row
-            if len(LETTERS) > 0 and LETTERS[len(LETTERS)-1] != chr(K_SPACE):
-                LETTERS.append(chr(key))
-                recognizeWord()
-        else:
-            # Everything else appends capitalized
-            LETTERS.append(chr(key).capitalize())
-        if len(LETTERS) > MAX_LETTERS:
-            LETTERS = LETTERS[1:]
-
-def handleEvents():
-    for event in pygame.event.get():
-        if event.type == QUIT:
-            pygame.quit()
-            sys.exit()
-        elif event.type == KEYDOWN:
-            key = event.key
-            handleKeyDown(key)
-
-def refreshScreen():
-    DISPLAYSURF.fill([0,0,0])
-    l = FONT.render(''.join(LETTERS), 0, [255,255,255])
-    w = l.get_width()
-    DISPLAYSURF.blit(l, [SCREEN_WIDTH - w - 25, SCREEN_HEIGHT - 110])
-    word_offset = SCREEN_HEIGHT - 250
-    for w in reversed(WORDS):
-        if word_offset < -100:
-            continue
-        words = FONT.render(w, 0, [255,255,255])
-        DISPLAYSURF.blit(words, [0,word_offset])
-        word_offset -= 100
-    pygame.display.flip()
-
-while True: # main game loop
-    handleEvents()
-    refreshScreen()
-    FPSCLOCK.tick(FPS)
+if __name__ == '__main__':
+    Game().run()
