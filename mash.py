@@ -11,6 +11,7 @@ class Configuration:
         self.screen_width = 800
         self.screen_height = 600
         self.allowed_punctuation = [K_SPACE, K_PERIOD, K_RETURN]
+        self.cursor_blink_rate_sec = 1
 
 
 class Time:
@@ -32,9 +33,24 @@ class Display:
 
     def refresh(self, state):
         self.surface.fill([0,0,0])
+        # Compute cursor
+        cursor = self.font.render('_', 0, [255,255,255])
+        cursor_width = cursor.get_width()
+        cursor_point = [self.config.screen_width - cursor_width - 25, self.config.screen_height - 110]
+        cursor_on = state.frames / (self.config.fps / 2) % 2 == 0
+        # Compute letters
         l = self.font.render(''.join(state.letters), 0, [255,255,255])
         w = l.get_width()
-        self.surface.blit(l, [self.config.screen_width - w - 25, self.config.screen_height - 110])
+        # Adjust cursor to remove left-side whitespace
+        left_whitespace = cursor_point[0] - w
+        if left_whitespace > 0:
+            cursor_point[0] -= left_whitespace
+        # Draw cursor
+        if cursor_on:
+            self.surface.blit(cursor, cursor_point)
+        # Draw letters
+        self.surface.blit(l, [cursor_point[0] - w, cursor_point[1]])
+        # Words
         word_offset = self.config.screen_height - 250
         for w in reversed(state.words):
             if word_offset < -100:
@@ -79,8 +95,9 @@ class State:
 
     def __init__(self, config):
         self.config = config
-        self.letters = ['M','A','S','H','!',' ',' ',' ',' ',' ']
-        self.words = []
+        self.letters = []
+        self.words = ["OKAY", "MASH"]
+        self.frames = 0
 
 
 class Game:
@@ -132,6 +149,7 @@ class Game:
     def run(self):
         while True:
             self.handle_events()
+            self.state.frames += 1
             self.display.refresh(self.state)
             self.time.tick()
 
