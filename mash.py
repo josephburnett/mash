@@ -122,7 +122,10 @@ class Game:
                 self.handle_key_down(key)
 
     def handle_key_down(self, key):
-        if (key >= K_a and key <= K_z) or key in self.config.allowed_punctuation:
+        if key == K_BACKSPACE:
+            if len(self.state.letters) > 0:
+                self.state.letters = self.state.letters[:-1]
+        elif (key >= K_a and key <= K_z) or key in self.config.allowed_punctuation:
             letters = self.state.letters
             if key == K_RETURN:
                 # Return clears the input buffer
