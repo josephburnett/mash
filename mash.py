@@ -1,5 +1,6 @@
-import os, pygame, sys
+import os, pygame, sys, yaml
 from multiprocessing import Pool
+from os.path import expanduser
 from pygame.locals import *
 
 
@@ -12,6 +13,12 @@ class Configuration:
         self.screen_height = 600
         self.allowed_punctuation = [K_SPACE, K_PERIOD, K_RETURN]
         self.cursor_blink_rate_sec = 1
+        try:
+            with open (expanduser('~/.mash')) as f:
+                custom_config = yaml.safe_load(f)
+                self.__dict__.update(custom_config)
+        except IOError:
+            pass
 
 
 class Time:
