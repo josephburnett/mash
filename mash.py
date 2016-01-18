@@ -13,6 +13,7 @@ class Configuration:
         self.screen_height = 600
         self.allowed_punctuation = [K_SPACE, K_PERIOD, K_RETURN]
         self.cursor_blink_rate_sec = 1
+        self.custom_words = []
         try:
             with open (expanduser('~/.mash')) as f:
                 custom_config = yaml.safe_load(f)
@@ -84,6 +85,7 @@ class Words:
         self.config = config
         with open('words.txt', 'r') as f:
             self.known_words = set(map(lambda x: x.strip().upper(), list(f)))
+        self.known_words.update(set(map(lambda x: x.strip().upper(), config.custom_words)))
 
     def recognize(self, state):
         word_letters = []
