@@ -147,20 +147,24 @@ class Game:
 
         if (key >= K_a and key <= K_z):
             state.letters.append(chr(key).capitalize())
+            # Transition ([K_a-K_z] *) => (TYPING)
             if self.words.recognize(state.letters):
                 state.input_state = InputState.TYPING
+            # Transition ([K_a-K_z] *) => (MASHING)
             else:
                 state.input_state = InputState.MASHING
 
         if key == K_SPACE:
             if state.input_state in [InputState.TYPING_SPACE, InputState.MASHING_SPACE]:
                 pass
+            # Transition (K_SPACE TYPING) => (TYPING_SPACE)
             elif state.input_state == InputState.TYPING:
                 state.letters.append(' ')
                 word = self.words.recognize(state.letters)
                 self.speech.say(word)
                 state.words.append(word)
                 state.input_state = InputState.TYPING_SPACE
+            # Transition (K_SPACE MASHING) => (MASHING_SPACE)
             elif state.input_state == InputState.MASHING:
                 state.letters.append(' ')
                 state.input_state = InputState.MASHING_SPACE
@@ -168,28 +172,35 @@ class Game:
         if key == K_BACKSPACE:
             if state.input_state == InputState.EMPTY:
                 pass
+            # Transition (K_BACKSPACE TYPING_SPACE) => (TYPING)
             elif state.input_state == InputState.TYPING_SPACE:
                 state.words = state.words[:-1]
                 state.letters = state.letters[:-1]
                 state.input_state = InputState.TYPING
+            # Transition (K_BACKSPACE MASHING_SPACE) => (MASHING)
             elif state.input_state == InputState.MASHING_SPACE:
                 state.letters = state.letters[:-1]
                 state.input_state = InputState.MASHING
             elif state.input_state in [InputState.TYPING, InputState.MASHING]:
                 state.letters = state.letters[:-1]
+                # Transition (K_BACKSPACE TYPING|MASHING) => EMPTY
                 if len(state.letters) == 0:
                     state.input_state = InputState.EMPTY
                 else:
                     typing = self.words.recognize(state.letters)
                     last_letter = state.letters[len(state.letters)-1]
                     if typing:
+                        # Transition (K_BACKSPACE TYPING|MASHING) => (TYPING_SPACE)
                         if last_letter == ' ':
                             state.input_state = InputState.TYPING_SPACE
+                        # Transition (K_BACKSPACE TYPING|MASHING) => (TYPING)
                         else:
                             state.input_state = InputState.TYPING
                     else:
+                        # Transition (K_BACKSPACE TYPING|MASHING) => (MASHING_SPACE)
                         if last_letter == ' ':
                             state.input_state = InputState.MASHING_SPACE
+                        # Transition (K_BACKSPACE TYPING|MASHING) => (MASHING)
                         else:
                             state.input_state = InputState.MASHING
 
@@ -207,8 +218,6 @@ class Game:
                 state.letters = []
                 state.words = []
                 state.input_state = InputState.EMPTY
-
-        print state.input_state
 
     def run(self):
         while True:
