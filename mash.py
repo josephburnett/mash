@@ -11,7 +11,6 @@ class Configuration:
         self.font_size = 150
         self.screen_width = 800
         self.screen_height = 600
-        self.allowed_punctuation = [K_SPACE, K_PERIOD, K_RETURN]
         self.cursor_blink_rate_sec = 1
         self.custom_words = []
         try:
@@ -58,13 +57,13 @@ class Display:
             self.surface.blit(cursor, cursor_point)
         # Draw letters
         self.surface.blit(l, [cursor_point[0] - w, cursor_point[1]])
-        # Words
+        # History
         word_offset = self.config.screen_height - 250
-        for w in reversed(state.words):
+        for w in reversed(state.history):
             if word_offset < -100:
                 continue
-            words = self.font.render(w, 0, [255,255,255])
-            self.surface.blit(words, [0,word_offset])
+            history = self.font.render(w, 0, [255,255,255])
+            self.surface.blit(history, [0,word_offset])
             word_offset -= 100
         pygame.display.flip()
 
@@ -87,17 +86,28 @@ class Words:
             self.known_words = set(map(lambda x: x.strip().upper(), list(f)))
         self.known_words.update(set(map(lambda x: x.strip().upper(), config.custom_words)))
 
-    def recognize(self, state):
-        word_letters = []
-        word = ''
-        for l in state.letters:
-            if l == ' ' or l == '.':
-                word = ''.join(word_letters)
-                word_letters = []
-            else:
-                word_letters.append(l)
+    def recognize(self, letters):
+        word = self.last_proto_word(letters)
+        if word is None or word == '':
+            return None
         if word in self.known_words:
             return word
+
+    def last_proto_word(self, letters):
+        if len(letters) == 0:
+            return nil
+        if letters[len(letters)-1] == ' ':
+            letters = letters[:-1]
+        if ' ' in letters:
+            last_space = len(letters) - letters[::-1].index(' ') - 1
+            return ''.join(letters[last_space+1:])
+        return ''.join(letters)
+
+
+def enum(**enums):
+    return type('Enum', (), enums)
+
+InputState = enum(EMPTY=1, MASHING=2, MASHING_SPACE=3, TYPING=4, TYPING_SPACE=5)
 
 
 class State:
@@ -105,8 +115,10 @@ class State:
     def __init__(self, config):
         self.config = config
         self.letters = []
-        self.words = ["OKAY", "MASH"]
+        self.words = []
+        self.history = ["OKAY", "MASH"]
         self.frames = 0
+        self.input_state = InputState.EMPTY
 
 
 class Game:
@@ -131,32 +143,72 @@ class Game:
                 self.handle_key_down(key)
 
     def handle_key_down(self, key):
-        if key == K_BACKSPACE:
-            if len(self.state.letters) > 0:
-                self.state.letters = self.state.letters[:-1]
-        elif (key >= K_a and key <= K_z) or key in self.config.allowed_punctuation:
-            letters = self.state.letters
-            if key == K_RETURN:
-                # Return clears the input buffer
-                letters.append(' ')
-                word = self.words.recognize(self.state)
-                if word:
-                    self.state.words.append(word)
-                    self.speech.say(word)
-                self.state.letters = letters = []
-            elif key == K_SPACE:
-                # Only one space in a row
-                if len(letters) > 0 and letters[len(letters)-1] != chr(K_SPACE):
-                    letters.append(chr(key))
-                    word = self.words.recognize(self.state)
-                    if word:
-                        self.state.words.append(word)
-                        self.speech.say(word)
+        state = self.state
+
+        if (key >= K_a and key <= K_z):
+            state.letters.append(chr(key).capitalize())
+            if self.words.recognize(state.letters):
+                state.input_state = InputState.TYPING
             else:
-                # Everything else appends capitalized
-                letters.append(chr(key).capitalize())
-            if len(letters) > self.config.max_letters:
-                self.state.letters = letters = letters[1:]
+                state.input_state = InputState.MASHING
+
+        if key == K_SPACE:
+            if state.input_state in [InputState.TYPING_SPACE, InputState.MASHING_SPACE]:
+                pass
+            elif state.input_state == InputState.TYPING:
+                state.letters.append(' ')
+                word = self.words.recognize(state.letters)
+                self.speech.say(word)
+                state.words.append(word)
+                state.input_state = InputState.TYPING_SPACE
+            elif state.input_state == InputState.MASHING:
+                state.letters.append(' ')
+                state.input_state = InputState.MASHING_SPACE
+
+        if key == K_BACKSPACE:
+            if state.input_state == InputState.EMPTY:
+                pass
+            elif state.input_state == InputState.TYPING_SPACE:
+                state.words = state.words[:-1]
+                state.letters = state.letters[:-1]
+                state.input_state = InputState.TYPING
+            elif state.input_state == InputState.MASHING_SPACE:
+                state.letters = state.letters[:-1]
+                state.input_state = InputState.MASHING
+            elif state.input_state in [InputState.TYPING, InputState.MASHING]:
+                state.letters = state.letters[:-1]
+                if len(state.letters) == 0:
+                    state.input_state = InputState.EMPTY
+                else:
+                    typing = self.words.recognize(state.letters)
+                    last_letter = state.letters[len(state.letters)-1]
+                    if typing:
+                        if last_letter == ' ':
+                            state.input_state = InputState.TYPING_SPACE
+                        else:
+                            state.input_state = InputState.TYPING
+                    else:
+                        if last_letter == ' ':
+                            state.input_state = InputState.MASHING_SPACE
+                        else:
+                            state.input_state = InputState.MASHING
+
+        if key == K_RETURN:
+            if state.input_state in [InputState.MASHING, InputState.MASHING_SPACE]:
+                state.letters = []
+                state.words = []
+                state.input_state = InputState.EMPTY
+            else:
+                if state.input_state == InputState.TYPING:
+                    word = self.words.recognize(state.letters)
+                    self.speech.say(word)
+                    state.words.append(word)
+                state.history.append(' '.join(state.words))
+                state.letters = []
+                state.words = []
+                state.input_state = InputState.EMPTY
+
+        print state.input_state
 
     def run(self):
         while True:
@@ -168,7 +220,6 @@ class Game:
 
 def speak(word):
     os.system('echo {} | festival --tts'.format(word))
-
 
 if __name__ == '__main__':
     Game().run()
