@@ -6,20 +6,27 @@ from pygame.locals import *
 
 class Configuration:
     def __init__(self):
+        # Configuration which can be overridden with a .mash file.
+        self.background_color = [0,0,0]
+        self.consonate_color = [77,255,136]
+        self.cursor_blink_rate_sec = 1
+        self.cursor_color = [255,255,255]
+        self.custom_words = []
+        self.font_size = 150
         self.fps = 30
-        self.max_letters = 20
         self.font_size = 150
         self.screen_width = 800
         self.screen_height = 600
-        self.cursor_blink_rate_sec = 1
-        self.custom_words = []
+        self.vowel_color = [229,128,255]
+        self.vowels = ['A','E','I','O','U']
         try:
             with open (expanduser('~/.mash')) as f:
                 custom_config = yaml.safe_load(f)
                 self.__dict__.update(custom_config)
         except IOError:
             pass
-
+        # Configuration which cannot be overridden.
+        self.max_letters = 50
 
 class Time:
 
@@ -39,33 +46,56 @@ class Display:
         self.font = pygame.font.SysFont(pygame.font.get_default_font(), config.font_size)
 
     def refresh(self, state):
-        self.surface.fill([0,0,0])
+        self.surface.fill(self.config.background_color)
         # Compute cursor
-        cursor = self.font.render('_', 0, [255,255,255])
+        cursor = self.font.render('_', 0, self.config.cursor_color)
         cursor_width = cursor.get_width()
         cursor_point = [self.config.screen_width - cursor_width - 25, self.config.screen_height - 110]
         cursor_on = state.frames / (self.config.fps / 2) % 2 == 0
         # Compute letters
-        l = self.font.render(''.join(state.letters), 0, [255,255,255])
-        w = l.get_width()
+        rendered_letters, letters_width, _ = self.render_letters(state.letters)
         # Adjust cursor to remove left-side whitespace
-        left_whitespace = cursor_point[0] - w
+        left_whitespace = cursor_point[0] - letters_width
         if left_whitespace > 0:
             cursor_point[0] -= left_whitespace
         # Draw cursor
         if cursor_on:
             self.surface.blit(cursor, cursor_point)
         # Draw letters
-        self.surface.blit(l, [cursor_point[0] - w, cursor_point[1]])
+        point = [cursor_point[0] - letters_width, cursor_point[1]]
+        self.display_letters(rendered_letters, point)
         # History
         word_offset = self.config.screen_height - 250
-        for w in reversed(state.history):
+        for word in reversed(state.history):
             if word_offset < -100:
                 continue
-            history = self.font.render(w, 0, [255,255,255])
-            self.surface.blit(history, [0,word_offset])
+            rendered_letters, _, _ = self.render_letters(word)
+            self.display_letters(rendered_letters, [0, word_offset])
             word_offset -= 100
         pygame.display.flip()
+
+    def render_letters(self, letters):
+        if letters is str:
+            letters = list(letters)
+        rendered_letters = []
+        for l in letters:
+            if l in self.config.vowels:
+                rendered_letters.append(self.font.render(l, 0, self.config.vowel_color))
+            else:
+                rendered_letters.append(self.font.render(l, 0, self.config.consonate_color))
+        total_width = 0
+        max_height = 0
+        for r in rendered_letters:
+            total_width += r.get_width()
+            if r.get_height() > max_height:
+                max_height = r.get_height()
+        return (rendered_letters, total_width, max_height)
+
+    def display_letters(self, rendered_letters, point):
+        offset = 0
+        for letter in rendered_letters:
+            self.surface.blit(letter, [point[0] + offset, point[1]])
+            offset += letter.get_width()
 
 
 class Speech:
