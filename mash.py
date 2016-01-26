@@ -15,6 +15,7 @@ class Configuration:
         self.font_size = 150
         self.fps = 30
         self.font_size = 150
+        self.mash_color_dim_ratio = 0.35
         self.screen_width = 800
         self.screen_height = 600
         self.vowel_color = [229,128,255]
@@ -53,7 +54,8 @@ class Display:
         cursor_point = [self.config.screen_width - cursor_width - 25, self.config.screen_height - 110]
         cursor_on = state.frames / (self.config.fps / 2) % 2 == 0
         # Compute letters
-        rendered_letters, letters_width, _ = self.render_letters(state.letters)
+        format_flags = self.format_letters(state.letters, state.input_state_stack)
+        rendered_letters, letters_width, _ = self.render_letters(state.letters, format_flags)
         # Adjust cursor to remove left-side whitespace
         left_whitespace = cursor_point[0] - letters_width
         if left_whitespace > 0:
@@ -65,24 +67,31 @@ class Display:
         point = [cursor_point[0] - letters_width, cursor_point[1]]
         self.display_letters(rendered_letters, point)
         # History
-        word_offset = self.config.screen_height - 250
-        for word in reversed(state.history):
-            if word_offset < -100:
+        phrase_offset = self.config.screen_height - 250
+        for phrase, input_state_stack in zip(reversed(state.history), reversed(state.history_state_stacks)):
+            if phrase_offset < -100:
                 continue
-            rendered_letters, _, _ = self.render_letters(word)
-            self.display_letters(rendered_letters, [0, word_offset])
-            word_offset -= 100
+            format_flags = self.format_letters(phrase, input_state_stack)
+            rendered_letters, _, _ = self.render_letters(phrase, format_flags)
+            self.display_letters(rendered_letters, [0, phrase_offset])
+            phrase_offset -= 100
         pygame.display.flip()
 
-    def render_letters(self, letters):
+    def render_letters(self, letters, format_flags):
         if letters is str:
             letters = list(letters)
         rendered_letters = []
-        for l in letters:
-            if l in self.config.vowels:
-                rendered_letters.append(self.font.render(l, 0, self.config.vowel_color))
+        for l,f in zip(letters, format_flags):
+            color = self.config.consonate_color
+            if FormatFlag.VOWEL in f:
+                color = self.config.vowel_color
+            if FormatFlag.MASHED_WORD in f:
+                ratio = self.config.mash_color_dim_ratio
+                color = [int(color[0] * ratio), int(color[1] * ratio), int(color[2] * ratio)]
+            if FormatFlag.VOWEL in f:
+                rendered_letters.append(self.font.render(l, 0, color))
             else:
-                rendered_letters.append(self.font.render(l, 0, self.config.consonate_color))
+                rendered_letters.append(self.font.render(l, 0, color))
         total_width = 0
         max_height = 0
         for r in rendered_letters:
@@ -96,6 +105,33 @@ class Display:
         for letter in rendered_letters:
             self.surface.blit(letter, [point[0] + offset, point[1]])
             offset += letter.get_width()
+
+    def format_letters(self, letters, input_state_stack):
+        if letters is str:
+            letters = list(letters)
+        if len(letters) == 0:
+            return []
+        input_state_stack = input_state_stack[1:] # Drop the first EMPTY state.
+        format_flags = []
+        recognized_word = False
+        first_letter = True
+        for letter, input_state in zip(reversed(letters), reversed(input_state_stack)):
+            if input_state == InputState.TYPING_SPACE:
+                recognized_word = True
+            elif input_state == InputState.MASHING_SPACE:
+                recognized_word = False
+            if first_letter and input_state_stack[len(input_state_stack)-1] == InputState.TYPING:
+                recognized_word = True
+                first_letter = False
+            letter_format = []
+            if not recognized_word:
+                letter_format.append(FormatFlag.MASHED_WORD)
+            if letter in self.config.vowels:
+                letter_format.append(FormatFlag.VOWEL)
+            else:
+                letter_format.append(FormatFlag.CONSONATE)
+            format_flags.append(letter_format)
+        return reversed(format_flags)
 
 
 class Speech:
@@ -138,6 +174,7 @@ def enum(**enums):
     return type('Enum', (), enums)
 
 InputState = enum(EMPTY=1, MASHING=2, MASHING_SPACE=3, TYPING=4, TYPING_SPACE=5)
+FormatFlag = enum(VOWEL=1, CONSONATE=2, MASHED_WORD=3)
 
 
 class State:
@@ -146,21 +183,22 @@ class State:
         self.config = config
         self.letters = []
         self.words = []
-        self.history = ["OKAY", "MASH"]
+        self.history = []
+        self.history_state_stacks = []
         self.frames = 0
-        self.input_state = InputState.EMPTY
-        self.input_state_stack = []
+        self.input_state_stack = [InputState.EMPTY]
 
     def transition(self, state):
         if state == InputState.EMPTY:
-            self.input_state_stack = []
+            self.input_state_stack = [state]
         else:
-            self.input_state_stack.append(self.input_state)
-        self.input_state = state
+            self.input_state_stack.append(state)
 
     def pop(self):
-        self.input_state = self.input_state_stack[len(self.input_state_stack)-1]
         self.input_state_stack = self.input_state_stack[:-1]
+
+    def current_input_state(self):
+        return self.input_state_stack[len(self.input_state_stack)-1]
 
 
 class Game:
@@ -197,48 +235,52 @@ class Game:
                 state.transition(InputState.MASHING)
 
         if key == K_SPACE:
-            if state.input_state in [InputState.TYPING_SPACE, InputState.MASHING_SPACE]:
+            if state.current_input_state() in [InputState.TYPING_SPACE, InputState.MASHING_SPACE]:
                 pass
             # Transition (K_SPACE TYPING) => (TYPING_SPACE)
-            elif state.input_state == InputState.TYPING:
+            elif state.current_input_state() == InputState.TYPING:
                 state.letters.append(' ')
                 word = self.words.recognize(state.letters)
                 self.speech.say(word)
                 state.words.append(word)
                 state.transition(InputState.TYPING_SPACE)
             # Transition (K_SPACE MASHING) => (MASHING_SPACE)
-            elif state.input_state == InputState.MASHING:
+            elif state.current_input_state() == InputState.MASHING:
                 state.letters.append(' ')
                 state.transition(InputState.MASHING_SPACE)
 
         if key == K_BACKSPACE:
-            if state.input_state == InputState.EMPTY:
+            if state.current_input_state() == InputState.EMPTY:
                 pass
             # Transition (K_BACKSPACE *) => (prev)
             else:
-                if state.input_state == InputState.TYPING_SPACE:
+                if state.current_input_state() == InputState.TYPING_SPACE:
                     state.words = state.words[:-1]
                 state.letters = state.letters[:-1]
                 state.pop()
 
         if key == K_RETURN:
-            if state.input_state == InputState.EMPTY:
+            if state.current_input_state() == InputState.EMPTY:
                 pass
             # Transition: (K_RETURN MASHING|MASHING_SPACE) => (EMPTY)
-            elif state.input_state in [InputState.MASHING, InputState.MASHING_SPACE]:
+            elif state.current_input_state() in [InputState.MASHING, InputState.MASHING_SPACE]:
                 state.letters = []
                 state.words = []
                 state.transition(InputState.EMPTY)
             # Transition: (K_RETURN TYPING|TYPING_SPACE) => (EMPTY)
             else:
-                if state.input_state == InputState.TYPING:
+                if state.current_input_state() == InputState.TYPING:
                     word = self.words.recognize(state.letters)
                     self.speech.say(word)
                     state.words.append(word)
-                state.history.append(' '.join(state.words))
+                # Only accept into history if there are no mashed words.
+                if not InputState.MASHING_SPACE in state.input_state_stack:
+                    state.history.append(' '.join(state.words))
+                    state.history_state_stacks.append(state.input_state_stack)
                 state.letters = []
                 state.words = []
                 state.transition(InputState.EMPTY)
+
 
     def run(self):
         while True:
