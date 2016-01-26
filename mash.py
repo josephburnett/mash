@@ -152,7 +152,10 @@ class State:
         self.input_state_stack = []
 
     def transition(self, state):
-        self.input_state_stack.append(self.input_state)
+        if state == InputState.EMPTY:
+            self.input_state_stack = []
+        else:
+            self.input_state_stack.append(self.input_state)
         self.input_state = state
 
     def pop(self):
@@ -219,8 +222,10 @@ class Game:
                 state.pop()
 
         if key == K_RETURN:
+            if state.input_state == InputState.EMPTY:
+                pass
             # Transition: (K_RETURN MASHING|MASHING_SPACE) => (EMPTY)
-            if state.input_state in [InputState.MASHING, InputState.MASHING_SPACE]:
+            elif state.input_state in [InputState.MASHING, InputState.MASHING_SPACE]:
                 state.letters = []
                 state.words = []
                 state.transition(InputState.EMPTY)
