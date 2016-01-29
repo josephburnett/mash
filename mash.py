@@ -138,7 +138,7 @@ class Speech:
 
     def __init__(self, config):
         self.config = config
-        self.pool = Pool(processes=1)
+        self.pool = Pool(processes=3)
 
     def say(self, word):
         self.pool.apply_async(speak, [word])
@@ -291,7 +291,7 @@ class Game:
 
 
 def speak(word):
-    os.system('echo {} | festival --tts'.format(word))
+    os.system('echo {} | espeak -ven+f3 -p80 -k20 -s120'.format(word.lower()))
 
 if __name__ == '__main__':
     Game().run()
