@@ -48,8 +48,11 @@ class Display:
 
     def __init__(self, config):
         self.config = config
-        self.surface = pygame.display.set_mode((config.screen_width, config.screen_height))
         self.font = pygame.font.SysFont(pygame.font.get_default_font(), config.font_size)
+        self.resize()
+
+    def resize(self):
+        self.surface = pygame.display.set_mode((self.config.screen_width, self.config.screen_height), pygame.RESIZABLE)
 
     def refresh(self, state):
         if not state.dirty:
@@ -229,11 +232,20 @@ class Game:
             if event.type == QUIT:
                 pygame.quit()
                 sys.exit()
+            elif event.type == VIDEORESIZE:
+                self.handle_resize(event)
             elif event.type == KEYDOWN:
-                key = event.key
-                self.handle_key_down(key)
+                self.handle_key_down(event)
 
-    def handle_key_down(self, key):
+    def handle_resize(self, event):
+        if event.w and event.h:
+            self.config.screen_height = event.h
+            self.config.screen_width = event.w
+            self.display.resize()
+            self.state.dirty = True
+
+    def handle_key_down(self, event):
+        key = event.key
         state = self.state
 
         if (key >= K_a and key <= K_z):
