@@ -35,7 +35,12 @@ class Time:
         self.config = config
         self.fps_clock = pygame.time.Clock()
 
-    def tick(self):
+    def tick(self, state):
+        state.frames += 1
+        previous_cursor_on = state.cursor_on
+        state.cursor_on = state.frames / (self.config.fps / 2) % 2 == 0
+        if previous_cursor_on != state.cursor_on:
+            state.dirty = True
         self.fps_clock.tick(self.config.fps)
 
 
@@ -47,12 +52,13 @@ class Display:
         self.font = pygame.font.SysFont(pygame.font.get_default_font(), config.font_size)
 
     def refresh(self, state):
+        if not state.dirty:
+            return
         self.surface.fill(self.config.background_color)
         # Compute cursor
         cursor = self.font.render('_', 0, self.config.cursor_color)
         cursor_width = cursor.get_width()
         cursor_point = [self.config.screen_width - cursor_width - 25, self.config.screen_height - 110]
-        cursor_on = state.frames / (self.config.fps / 2) % 2 == 0
         # Compute letters
         format_flags = self.format_letters(state.letters, state.input_state_stack)
         rendered_letters, letters_width, _ = self.render_letters(state.letters, format_flags)
@@ -61,7 +67,7 @@ class Display:
         if left_whitespace > 0:
             cursor_point[0] -= left_whitespace
         # Draw cursor
-        if cursor_on:
+        if state.cursor_on:
             self.surface.blit(cursor, cursor_point)
         # Draw letters
         point = [cursor_point[0] - letters_width, cursor_point[1]]
@@ -76,6 +82,7 @@ class Display:
             self.display_letters(rendered_letters, [0, phrase_offset])
             phrase_offset -= 100
         pygame.display.flip()
+        state.dirty = False
 
     def render_letters(self, letters, format_flags):
         if letters is str:
@@ -187,14 +194,18 @@ class State:
         self.history_state_stacks = []
         self.frames = 0
         self.input_state_stack = [InputState.EMPTY]
+        self.dirty = True
+        self.cursor_on = True
 
     def transition(self, state):
+        self.dirty = True
         if state == InputState.EMPTY:
             self.input_state_stack = [state]
         else:
             self.input_state_stack.append(state)
 
     def pop(self):
+        self.dirty = True
         self.input_state_stack = self.input_state_stack[:-1]
 
     def current_input_state(self):
@@ -285,9 +296,8 @@ class Game:
     def run(self):
         while True:
             self.handle_events()
-            self.state.frames += 1
             self.display.refresh(self.state)
-            self.time.tick()
+            self.time.tick(self.state)
 
 
 def speak(word):
