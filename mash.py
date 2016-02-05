@@ -12,12 +12,19 @@ class Configuration:
         self.cursor_blink_rate_sec = 1
         self.cursor_color = [255,255,255]
         self.custom_words = []
+        self.easter_eggs = {
+            'goldbug': {
+                'show': 'img/goldbug.png',
+                'say': 'Hey, I\'m Goldbug!',
+            }
+        }
         self.font_size = 150
         self.fps = 30
         self.font_size = 150
         self.mash_color_dim_ratio = 0.35
         self.screen_width = 800
         self.screen_height = 600
+        self.show_image_seconds = 3
         self.vowel_color = [229,128,255]
         self.vowels = ['A','E','I','O','U']
         try:
@@ -28,6 +35,13 @@ class Configuration:
             pass
         # Configuration which cannot be overridden.
         self.max_letters = 50
+        # Normalize easter eggs
+        normalized_easter_eggs = dict()
+        for key, value in self.easter_eggs.items():
+            normalized_easter_eggs[key.strip().upper()] = value
+            self.custom_words.append(key)
+        self.easter_eggs = normalized_easter_eggs
+
 
 class Time:
 
@@ -84,6 +98,12 @@ class Display:
             rendered_letters, _, _ = self.render_letters(phrase, format_flags)
             self.display_letters(rendered_letters, [0, phrase_offset])
             phrase_offset -= 100
+        # Draw easter egg image
+        if state.frames < state.clear_image_on_frame:
+            x_offset = self.config.screen_width / 2 - state.image.get_width() / 2
+            y_offset = self.config.screen_height / 2 - state.image.get_height() / 2
+            self.surface.blit(state.image, [x_offset, y_offset])
+        # Show it!
         pygame.display.flip()
         state.dirty = False
 
@@ -199,6 +219,8 @@ class State:
         self.input_state_stack = [InputState.EMPTY]
         self.dirty = True
         self.cursor_on = True
+        self.image = False
+        self.clear_image_on_frame = 0
 
     def transition(self, state):
         self.dirty = True
@@ -213,6 +235,11 @@ class State:
 
     def current_input_state(self):
         return self.input_state_stack[len(self.input_state_stack)-1]
+
+    def show(self, image):
+        self.image = pygame.image.load(image)
+        self.clear_image_on_frame = self.frames + self.config.fps * self.config.show_image_seconds
+        self.dirty = True
 
 
 class Game:
@@ -264,7 +291,7 @@ class Game:
             elif state.current_input_state() == InputState.TYPING:
                 state.letters.append(' ')
                 word = self.words.recognize(state.letters)
-                self.speech.say(word)
+                self.react_to_word(word)
                 state.words.append(word)
                 state.transition(InputState.TYPING_SPACE)
             # Transition (K_SPACE MASHING) => (MASHING_SPACE)
@@ -294,7 +321,7 @@ class Game:
             else:
                 if state.current_input_state() == InputState.TYPING:
                     word = self.words.recognize(state.letters)
-                    self.speech.say(word)
+                    self.react_to_word(word)
                     state.words.append(word)
                 # Only accept into history if there are no mashed words.
                 if not InputState.MASHING_SPACE in state.input_state_stack:
@@ -304,6 +331,15 @@ class Game:
                 state.words = []
                 state.transition(InputState.EMPTY)
 
+    def react_to_word(self, word):
+        if word in self.config.easter_eggs:
+            egg = self.config.easter_eggs[word]
+            if 'show' in egg:
+                self.state.show(egg['show'])
+            if 'say' in egg:
+                self.speech.say(egg['say'])
+        else:
+            self.speech.say(word)
 
     def run(self):
         while True:
@@ -313,7 +349,7 @@ class Game:
 
 
 def speak(word):
-    os.system('echo {} | espeak -ven+f3 -p80 -k20 -s120'.format(word.lower()))
+    os.system('echo "{}" | espeak -ven+f3 -p80 -k20 -s120'.format(word.lower()))
 
 if __name__ == '__main__':
     Game().run()
