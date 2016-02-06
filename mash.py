@@ -321,12 +321,13 @@ class Game:
             else:
                 if state.current_input_state() == InputState.TYPING:
                     word = self.words.recognize(state.letters)
-                    self.react_to_word(word)
                     state.words.append(word)
-                # Only accept into history if there are no mashed words.
+                # Only accept as a sentence if there are no mashed words.
                 if not InputState.MASHING_SPACE in state.input_state_stack:
-                    state.history.append(' '.join(state.words))
+                    sentence = ' '.join(state.words)
+                    state.history.append(sentence)
                     state.history_state_stacks.append(state.input_state_stack)
+                    self.react_to_word(sentence)
                 state.letters = []
                 state.words = []
                 state.transition(InputState.EMPTY)
