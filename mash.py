@@ -16,7 +16,7 @@ class Configuration:
             'goldbug': {
                 'show': 'img/goldbug.png',
                 'say': 'Hey, I\'m Goldbug!',
-            }
+            },
         }
         self.font_size = 150
         self.fps = 30
@@ -339,6 +339,10 @@ class Game:
                 self.state.show(egg['show'])
             if 'say' in egg:
                 self.speech.say(egg['say'])
+            if 'type' in egg:
+                for letter in egg['type']:
+                    event = pygame.event.Event(KEYDOWN, key=ord(letter.lower()))
+                    pygame.event.post(event)
         else:
             self.speech.say(word)
 
