@@ -1,11 +1,12 @@
-import os, pygame, sys, yaml
 from multiprocessing import Pool
 from os.path import expanduser
 from pygame.locals import *
+import os, pygame, sys, yaml
+import argparse
 
 
 class Configuration:
-    def __init__(self):
+    def __init__(self, args):
         # Configuration which can be overridden with a .mash file.
         self.background_color = [0,0,0]
         self.consonate_color = [77,255,136]
@@ -41,6 +42,8 @@ class Configuration:
             normalized_easter_eggs[key.strip().upper()] = value
             self.custom_words.append(key)
         self.easter_eggs = normalized_easter_eggs
+        
+        self.wordfile_path = args.wordfile
 
 
 class Time:
@@ -178,7 +181,7 @@ class Words:
 
     def __init__(self, config):
         self.config = config
-        with open('words.txt', 'r') as f:
+        with open(config.wordfile_path, 'r') as f:
             self.known_words = set(map(lambda x: x.strip().upper(), list(f)))
         self.known_words.update(set(map(lambda x: x.strip().upper(), config.custom_words)))
 
@@ -244,10 +247,10 @@ class State:
 
 class Game:
 
-    def __init__(self):
+    def __init__(self, args):
         pygame.init()
         pygame.display.set_caption('MASH!')
-        self.config = Configuration()
+        self.config = Configuration(args)
         self.time = Time(self.config)
         self.display = Display(self.config)
         self.speech = Speech(self.config)
@@ -357,4 +360,9 @@ def speak(word):
     os.system('echo "{}" | espeak -ven+f3 -p80 -k20 -s120'.format(word.lower()))
 
 if __name__ == '__main__':
-    Game().run()
+    parser = argparse.ArgumentParser(description='Fun typing for kids!')
+    parser.add_argument('--wordfile', '-w', type=str, default='words.txt', 
+                        help='List of words')
+    args = parser.parse_args()
+    
+    Game(args).run()
