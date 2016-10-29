@@ -182,7 +182,7 @@ class Words:
     def __init__(self, config):
         self.config = config
         with open(config.wordfile_path, 'r') as f:
-            self.known_words = set(map(lambda x: x.strip().upper(), list(f)))
+            self.known_words = set(map(lambda x: x.strip().upper(), filter(lambda w: '#' not in w, list(f))))
         self.known_words.update(set(map(lambda x: x.strip().upper(), config.custom_words)))
 
     def recognize(self, letters):
